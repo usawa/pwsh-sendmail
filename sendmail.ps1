@@ -127,6 +127,8 @@ if ($User -and $Passwd) {
 
 # text body
 # Note that to send newlines, it's not \n but `n (powershell)
+#Let's convert it (will add a parameter)
+$Body = $Body.replace("\n","`n")
 $Parameters.Add("TextBody", $Body)
 
 # HTML Body, not managed yet. We'll see if this is needed
