@@ -179,20 +179,15 @@ if ($High) {
 
 #SSL
 if ($UseSSL) {
-    $Parameters.Add("UseSsl","")
+    $Parameters.Add("UseSsl",$true)
 }
 
 # Subject
 $Parameters.Add("Subject", $Subject)
 
-# Use secure connection if available
-$UseSecureConnectionIfAvailable = $true
-$Parameters.Add("UseSecureConnectionIfAvailable", $UseSecureConnectionIfAvailable)
-
 # SMTP: Sender
 if (IsValidEmail -EmailAddress $From) {
-    $SMTPSender = [MimeKit.MailboxAddress]$From
-    $Parameters.Add("From", $SMTPSender)
+    $Parameters.Add("From", $From)
 } else {
     Write-Error "From: $From isn't a valid Email Address"
     exit 1
@@ -208,7 +203,7 @@ foreach($Recipient in $RecipientArray) {
     }
 }
 
-$Parameters.Add("To", $To)
+$Parameters.Add("To", $RecipientArray)
 
 # SMTP: CC
 if ($CC) {
@@ -219,7 +214,7 @@ if ($CC) {
             exit 1
         }
     }
-    $Parameters.Add("Cc", $CC)
+    $Parameters.Add("Cc", $CCArray)
 }
 
 # SMTP: BCC
@@ -231,7 +226,7 @@ if ($BCC) {
             exit 1
         }
     }
-    $Parameters.Add("Bcc", $Bcc)
+    $Parameters.Add("Bcc", $BCCArray)
 }
 
 # SMTP: Creds, not mandatory
@@ -256,26 +251,28 @@ $Parameters.Add("Text", $Body)
 # Attachement files, only one here, test if exists
 if($AttachmentPath) {
     $AttachmentArray = $AttachmentPath -split ","
-    $AttachmentList = [System.Collections.Generic.List[string]]::new()
+    $AttachmentList = @()
     foreach($Attachment in $AttachmentArray) {
+        if($V) {
+            Write-Output "Checking for Attachment file $Attachment"
+        }
         if(Test-Path -path $Attachment) {
-            $AttachmentList.Add($Attachment)
+            # Resolve the full path as issues with relative path
+            $FullPath = Resolve-Path -Path $Attachment
+            $AttachmentList += $FullPath
         } else {
-            Write-Error "Attachment file: $AttachmentPath can't be found"
+            Write-Error "Attachment file: $Attachment can't be found"
             exit 1
         }
     }
-    $Parameters.Add("Attachments", $AttachmentPath)
+    $Parameters.Add("Attachments", $AttachmentList)
 }
 
 if ($v) {
     Write-Output $Parameters
-    Write-Output "Recipients: $RecipientArray"
-    Write-Output "CC: $CCArray"
-    Write-Output "BCC: $BCCArray"
 }
 
 # Send Email
 if ( !$DryRun ) {
-    Send-MailMessage @Parameters
+    Send-EMailMessage @Parameters 
 }
