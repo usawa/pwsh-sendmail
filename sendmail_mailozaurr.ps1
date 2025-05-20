@@ -46,23 +46,34 @@
 #>
 
 param(
-    [Parameter(Mandatory)][string]$SMTPServer,
-    [Parameter(Mandatory)][int]$Port,
-    [Parameter(Mandatory)][string]$From,
-    [Parameter(Mandatory)][string]$To,
+    [Parameter(Mandatory)][String]$SMTPServer,
+    [Parameter(Mandatory)][Int32]$Port,
+    [Parameter(Mandatory)][String]$From,
+    [Parameter(Mandatory)][String]$To,
     [Parameter(Mandatory)][String]$Subject,
     [Parameter(Mandatory)][String]$Body,
+    [switch]$UseSSL,
     [String]$CC,
     [String]$BCC,
     [String]$User,
     [String]$Passwd,
     [String]$AttachmentPath,
+    [Switch]$High,
     [switch]$TestConn,
     [switch]$V,
     [switch]$DryRun
 )
 
-Import-Module Send-MailKitMessage
+#Installed with:  Install-Module -Name Mailozaurr -AllowPrerelease
+# Needs Powershell 5.1+
+Import-Module Mailozaurr
+
+# Send-EmailMessage [-Server <String>] [-Port <Int32>] [-From <Object>] [-ReplyTo <String>] [-Cc <String[]>]
+# [-Bcc <String[]>] [-To <String[]>] [-Subject <String>] [-Priority <String>] [-Encoding <String>]
+# [-DeliveryNotificationOption <String[]>] [-DeliveryStatusNotificationType <DeliveryStatusNotificationType>]
+# [-Credential <PSCredential>] [-SecureSocketOptions <SecureSocketOptions>] [-UseSsl] [-HTML <String[]>]
+# [-Text <String[]>] [-Attachment <String[]>] [-Timeout <Int32>] [-Suppress] [-WhatIf] [-Confirm]
+# [<CommonParameters>]
 
 # Global value
 $global:SMTPPorts = @( 25, 465, 587 )
@@ -140,7 +151,7 @@ if ( !( (IsValidFQDN -FQDN $SMTPServer) -or (IsValidIPv4 -IPAddress $SMTPServer)
     exit 1
 }
 
-$Parameters.Add("SMTPServer", $SMTPServer)
+$Parameters.Add("Server", $SMTPServer)
 
 # Check if Port is valid
 if ( !(IsValidSMTPPort -Port $Port) ) {
@@ -154,9 +165,24 @@ if ($TestConn -eq $true) {
     if ( !(Test-Port -Hostname $SMTPServer -Port $Port) ) {
         Write-Error "SMTP Server $SMTPServer`:$Port isn't accessible. Please check your firewall rules"
         exit 1
+    } else {
+        if ($V) {
+            Write-Output "$SMTPServer`:$Port is opened"
+        }
     }
 }
 
+# Priority
+if ($High) {
+    $Parameters.Add("Priority", "High")
+}
+
+#SSL
+if ($UseSSL) {
+    $Parameters.Add("UseSsl","")
+}
+
+# Subject
 $Parameters.Add("Subject", $Subject)
 
 # Use secure connection if available
@@ -174,46 +200,38 @@ if (IsValidEmail -EmailAddress $From) {
 
 # SMTP: To
 $RecipientArray = $To -split ","
-$SMTPRecipientList = [MimeKit.InternetAddressList]::new()
+#$SMTPRecipientList = [MimeKit.InternetAddressList]::new()
 foreach($Recipient in $RecipientArray) {
-    if(IsValidEmail -EmailAddress $Recipient) {
-        $SMTPRecipientList.Add([MimeKit.InternetAddress]$Recipient)
-    } else {
+    if( !(IsValidEmail -EmailAddress $Recipient) ) {
         Write-Error "To: $Recipient isn't a valid email address"
         exit 1
     }
 }
 
-$Parameters.Add("RecipientList", $SMTPRecipientList)
+$Parameters.Add("To", $To)
 
 # SMTP: CC
 if ($CC) {
     $CCArray = $CC -split ","
-    $SMTPCCList = [MimeKit.InternetAddressList]::new()
     foreach($Recipient in $CCArray) {
-        if(IsValidEmail -EmailAddress $Recipient) {
-            $SMTPCCList.Add([MimeKit.InternetAddress]$Recipient)
-        } else {
+        if( !(IsValidEmail -EmailAddress $Recipient) ) {
             Write-Error "CC: $Recipient isn't a valid email address"
             exit 1
         }
     }
-    $Parameters.Add("CCList", $SMTPCCList)
+    $Parameters.Add("Cc", $CC)
 }
 
 # SMTP: BCC
 if ($BCC) {
     $BCCArray = $BCC -split ","
-    $SMTPBCCList = [MimeKit.InternetAddressList]::new()
     foreach($Recipient in $BCCArray) {
-        if(IsValidEmail -EmailAddress $Recipient) {
-            $SMTPBCCList.Add([MimeKit.InternetAddress]$Recipient)
-        } else {
+        if(! (IsValidEmail -EmailAddress $Recipient) ) {
             Write-Error "BCC: $Recipient isn't a valid email address"
             exit 1
         }
     }
-    $Parameters.Add("BCCList", $SMTPBCCList)
+    $Parameters.Add("Bcc", $Bcc)
 }
 
 # SMTP: Creds, not mandatory
@@ -229,7 +247,7 @@ if ($User -and $Passwd) {
 # Note that to send newlines, it's not \n but `n (powershell)
 #Let's convert it (will add a parameter)
 $Body = $Body.replace("\n","`n")
-$Parameters.Add("TextBody", $Body)
+$Parameters.Add("Text", $Body)
 
 # HTML Body, not managed yet. We'll see if this is needed
 #$HTMLBody = [string]"HTMLBody"
@@ -247,7 +265,7 @@ if($AttachmentPath) {
             exit 1
         }
     }
-    $Parameters.Add("AttachmentList", $AttachmentList)
+    $Parameters.Add("Attachments", $AttachmentPath)
 }
 
 if ($v) {
@@ -259,5 +277,5 @@ if ($v) {
 
 # Send Email
 if ( !$DryRun ) {
-    Send-MailKitMessage @Parameters
+    Send-MailMessage @Parameters
 }
